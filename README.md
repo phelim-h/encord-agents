@@ -1,0 +1,103 @@
+<p align="center">
+<a href="https://docs.encord.com/docs/active-overview" target="_blank">Documentation</a> |
+<a href="https://colab.research.google.com/drive/1wvKAQ61JPebGnAT4nLXsfJRbx7dvtFdX?usp=sharing" target="_blank">Try it Now</a> |
+<a href="https://encord.com/blog/" target="_blank">Blog</a> |
+<a href="https://join.slack.com/t/encordactive/shared_invite/zt-1hc2vqur9-Fzj1EEAHoqu91sZ0CX0A7Q" target="_blank">Join our Community</a>
+</p>
+
+<h1 align="center">
+  <a href="https://encord.com"><img src="docs/assets/landing-banner.png" alt="Encord logo"/></a>
+</h1>
+
+<div style="display: flex; justify-content: space-between;">
+  <div style="flex: 1; padding: 10px;">
+    <a href="https://agents-docs.encord.com/" target="_blank" style="text-decoration:none">
+      <img alt="Documentation" src="https://img.shields.io/badge/docs-Online-blue">
+    </a>
+    <a href="https://github.com/encord-team/encord-notebooks" target="_blank" style="text-decoration:none">
+      <img alt="Encord Notebooks" src="https://img.shields.io/badge/Encord_Notebooks-blue?logo=github&label=&labelColor=181717">
+    </a>
+    <a href="https://colab.research.google.com/drive/1wvKAQ61JPebGnAT4nLXsfJRbx7dvtFdX?usp=sharing" target="_blank" style="text-decoration:none">
+      <img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg">
+    </a>
+    <a href="https://join.slack.com/t/encordactive/shared_invite/zt-1hc2vqur9-Fzj1EEAHoqu91sZ0CX0A7Q" target="_blank" style="text-decoration:none">
+      <img alt="Join us on Slack" src="https://img.shields.io/badge/Join_Our_Community-4A154B?label=&logo=slack&logoColor=white">
+    </a>
+    <a href="https://twitter.com/encord_team" target="_blank" style="text-decoration:none">
+      <img alt="Twitter Follow" src="https://img.shields.io/twitter/follow/encord_team?label=%40encord_team&amp;style=social">
+    </a>
+  </div>
+</div>
+
+Easily build agents for the Encord echo system.
+With just few lines of code, you can take automation to the next level.
+
+**Key features:**
+
+1. ⚡**Easy**: Multiple template agents to be adapted and hosted via GCP, own infra, or cloud.
+2. ⏩ **Convenient**: The library conveniently loads data via the [Encord SDK][encord_sdk] upon request.
+3. 👨‍💻 **Focus**: With essential resources readily available, you can focus on what matters. Create agents with pre-existing (or custom) dependencies for loading labels and data.
+4. 🤏 **Slim**: the library is slim at it's `core` and should not conflict with the dependencies of most projects.
+
+> 💡 For the full documentation and end-to-end examples, please see [here][docs-url].
+
+Here are some use-cases:
+
+![Decision tree for which agent to use](docs/assets/decide-on-agent-type.png)
+
+Here's how to build an Agent:
+
+```python
+from encord.objects import LabelRowV2
+from encord_agents.tasks import Runner
+
+runner = Runner(project_hash="<your_project_hash>")
+
+@runner.stage(name="<my_stage_name>")
+def by_city(lr: LabelRowV2) -> str:
+    location = "New York" if "NY" in lr.data_title else "San Francisco"
+
+    priority = 0.
+    if location == "New York":
+        priority = 1.
+    else if location == "San Francisco":
+        priority = 0.5
+
+    label_row.set_priority(priority=priority)
+
+    return "annotate"
+
+if __name__ == "__main__":
+    runner.run()
+```
+
+You can also inject dependencies:
+
+```python
+from typing_extensions import Annotated
+
+from encord.objects import LabelRowV2
+from encord_agents.tasks import Runner, Depends
+
+runner = Runner(project_hash="<your_project_hash>")
+
+def my_custom_dependency(label_row: LabelRowV2) -> dict:
+    # e.g., look up additional data in own db
+    return db.query("whatever")
+
+@runner.stage(name="<my_stage_name>")
+def by_custom_data(
+    custom_data: Annotated[dict, Depends(my_custom_dependency)]
+) -> str:
+    # `custom_data` automatically injected here.
+    # ... do your thing
+    # then, return name of task pathway.
+
+
+if __name__ == "__main__":
+    runner.run()
+```
+
+[docs-url]: https://agents-docs.encord.com/
+[encord_sdk]: https://pypi.org/project/encord/
+[fastapi]: https://fastapi.tiangolo.com/
