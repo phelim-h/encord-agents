@@ -706,6 +706,25 @@ markupsafe = ">=2.0.1"
 mkdocs = ">=1.1"
 
 [[package]]
+name = "mkdocs-codeinclude-plugin"
+version = "0.1.0"
+description = ""
+optional = false
+python-versions = "^3.10"
+files = []
+develop = false
+
+[package.dependencies]
+mkdocs = ">=1.2"
+pygments = ">=2.9.0"
+
+[package.source]
+type = "git"
+url = "https://github.com/frederik-encord/mkdocs-codeinclude-plugin.git"
+reference = "HEAD"
+resolved_reference = "b31de2579aaa7726b17b5fc28dbcdf8432ed4f93"
+
+[[package]]
 name = "mkdocs-get-deps"
 version = "0.2.0"
 description = "MkDocs extension that lists all dependencies according to a mkdocs.yml file"
@@ -1751,4 +1770,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "ae7f626ebc8fa83e29708b43fa7af4f89b3e02543cec7021b8a425db00b8f3d5"
+content-hash = "a23da4c3be54b513c0313ea298d486d95bc1a5d96e68905d6d13e27d8ac31a2e"
