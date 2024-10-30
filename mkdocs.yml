@@ -10,12 +10,15 @@ theme:
   name: "material"
   features:
     - content.code.copy
+    - navigation.footer
+    - navigation.expand
 
 nav:
   - "Home": index.md
   - "Installation": installation.md
   - "Authentication": authentication.md
   - "Getting started": getting_started.md
+  - "Dependencies": dependencies.md
   - "Editor Agents":
       - "Intro": editor_agents/index.md
       - "GCP Cloud Functions": editor_agents/gcp.md
@@ -24,7 +27,6 @@ nav:
   - "Task Agents":
       - "Intro": task_agents/index.md
       - "Examples": task_agents/examples/index.md
-  - "Dependencies": dependencies.md
   - "Reference":
       - "Editor agents": reference/editor_agents.md
       - "Task agents": reference/task_agents.md
@@ -38,15 +40,25 @@ markdown_extensions:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
   - attr_list
   - md_in_html
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
 
 plugins:
   - search
   - codeinclude
+  - git-revision-date-localized: # Shows last update date
+      enable_creation_date: true
   - mkdocstrings:
       handlers:
         python:
