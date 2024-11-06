@@ -43,6 +43,10 @@
 Easily build agents for the Encord echo system.
 With just few lines of code, you can take automation to the next level.
 
+```shell
+python -m pip install encord-agents
+```
+
 **Key features:**
 
 1. ⚡**Easy**: Multiple template agents to be adapted and hosted via GCP, own infra, or cloud.
@@ -66,13 +70,13 @@ from encord_agents.tasks import Runner
 runner = Runner(project_hash="<your_project_hash>")
 
 
-@runner.stage(UUID("<your_agent_stage_uuid>"))
+@runner.stage("<your_agent_stage_uuid>")
 def by_file_name(lr: LabelRowV2) -> UUID | None:
     # Assuming the data_title is of the format "%d.jpg"
     # and in the range [0; 100]
     priority = int(lr.data_title.split(".")[0]) / 100
     lr.set_priority(priority=priority)
-    return UUID("<your_pathway_uuid>")
+    return "<your_pathway_uuid>"
 
 
 if __name__ == "__main__":
