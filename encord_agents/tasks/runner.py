@@ -15,27 +15,29 @@ from encord.orm.workflow import WorkflowStageType
 from encord.project import Project
 from encord.workflow.stages.agent import AgentStage, AgentTask
 from encord.workflow.workflow import WorkflowStage
-from rich.console import Console
 from rich.panel import Panel
-from rich.text import Text
 from tqdm.auto import tqdm
 from typer import Abort
 
 from encord_agents.core.dependencies.models import Context, DecoratedCallable, Dependant
 from encord_agents.core.dependencies.utils import get_dependant, solve_dependencies
 from encord_agents.core.utils import get_user_client
+from encord_agents.exceptions import PrintableError, format_printable_error
 
 TaskAgentReturn = str | UUID | None
 
 
-class PrintableError(ValueError): ...
-
-
 class RunnerAgent:
-    def __init__(self, identity: str | UUID, callable: Callable[..., TaskAgentReturn]):
-        self.name = identity
+    def __init__(
+        self, identity: str | UUID, callable: Callable[..., TaskAgentReturn], printable_name: str | None = None
+    ):
+        self.identity = identity
+        self.printable_name = printable_name or identity
         self.callable = callable
         self.dependant: Dependant = get_dependant(func=callable)
+
+    def __repr__(self) -> str:
+        return f'RunnerAgent("{self.printable_name}")'
 
 
 class Runner:
@@ -105,9 +107,10 @@ class Runner:
             len([s for s in project.workflow.stages if s.stage_type == WorkflowStageType.AGENT]) > 0
         ), f"Provided project does not have any agent stages in it's workflow. {PROJECT_MUSTS}"
 
-    def _add_stage_agent(self, identity: str | UUID, func: Callable[..., TaskAgentReturn]):
-        self.agents.append(RunnerAgent(identity=identity, callable=func))
+    def _add_stage_agent(self, identity: str | UUID, func: Callable[..., TaskAgentReturn], printable_name: str | None):
+        self.agents.append(RunnerAgent(identity=identity, callable=func, printable_name=printable_name))
 
+    @format_printable_error
     def stage(self, stage: str | UUID) -> Callable[[DecoratedCallable], DecoratedCallable]:
         r"""
         Decorator to associate a function with an agent stage.
@@ -182,55 +185,40 @@ class Runner:
         Returns:
             The decorated function.
         """
+        printable_name = str(stage)
         try:
-            try:
-                stage = UUID(str(stage))
-            except ValueError:
-                pass
+            stage = UUID(str(stage))
+        except ValueError:
+            pass
 
-            if stage in [a.name for a in self.agents]:
+        if self.valid_stages is not None:
+            selected_stage: WorkflowStage | None = None
+            for v_stage in self.valid_stages:
+                attr = v_stage.title if isinstance(stage, str) else v_stage.uuid
+                if attr == stage:
+                    selected_stage = v_stage
+
+            if selected_stage is None:
+                agent_stage_names = self.get_stage_names(self.valid_stages)
                 raise PrintableError(
-                    f"Stage name [blue]`{stage}`[/blue] has already been assigned a function. You can only assign one callable to each agent stage."
+                    rf"Stage name [blue]`{stage}`[/blue] could not be matched against a project stage. Valid stages are \[{agent_stage_names}]."
                 )
+            stage = selected_stage.uuid
 
-            if self.valid_stages is not None:
-                selected_stage: WorkflowStage | None = None
-                for v_stage in self.valid_stages:
-                    attr = v_stage.title if isinstance(stage, str) else v_stage.uuid
-                    if attr == stage:
-                        selected_stage = v_stage
-
-                if selected_stage is None:
-                    agent_stage_names = self.get_stage_names(self.valid_stages)
-                    raise PrintableError(
-                        rf"Stage name [blue]`{stage}`[/blue] could not be matched against a project stage. Valid stages are \[{agent_stage_names}]."
-                    )
-                else:
-                    stage = selected_stage.uuid
-
-            def decorator(func: DecoratedCallable) -> DecoratedCallable:
-                self._add_stage_agent(stage, func)
-                return func
-
-            return decorator
-        except PrintableError as err:
-            output = io.StringIO()
-            console = Console(
-                force_terminal=True,
-                color_system="auto",
-                file=output,
-                force_interactive=False,
-                width=1000,
+        if stage in [a.identity for a in self.agents]:
+            raise PrintableError(
+                f"Stage name [blue]`{printable_name}`[/blue] has already been assigned a function. You can only assign one callable to each agent stage."
             )
 
-            text_obj = Text.from_markup(err.args[0])
-            console.print(text_obj, end="")
-            err.args = (output.getvalue(),)
-            raise
+        def decorator(func: DecoratedCallable) -> DecoratedCallable:
+            self._add_stage_agent(stage, func, printable_name)
+            return func
+
+        return decorator
 
     def _execute_tasks(
         self,
-        tasks: Iterable[tuple[AgentTask, LabelRowV2]],
+        tasks: Iterable[tuple[AgentTask, LabelRowV2 | None]],
         runner_agent: RunnerAgent,
         # num_threads: int,
         num_retries: int,
@@ -325,7 +313,7 @@ class Runner:
                 fn_name = getattr(runner_agent.callable, "__name__", "agent function")
                 separator = f"{os.linesep}\t"
                 agent_stage_names = separator + self.get_stage_names(valid_stages, join_str=separator) + os.linesep
-                if runner_agent.name not in agent_stages:
+                if runner_agent.identity not in agent_stages:
                     suggestion: str
                     if len(valid_stages) == 1:
                         suggestion = f'Did you mean to wrap [blue]`{fn_name}`[/blue] with{os.linesep}[magenta]@runner.stage(stage="{valid_stages[0].title}")[/magenta]{os.linesep}or{os.linesep}[magenta]@runner.stage(stage="{valid_stages[0].uuid}")[/magenta]'
@@ -347,7 +335,7 @@ def {fn_name}(...):
 def {fn_name}(...):
     ...[/magenta]"""
                     raise PrintableError(
-                        rf"""Your function [blue]`{fn_name}`[/blue] was annotated to match agent stage [blue]`{runner_agent.name}`[/blue] but that stage is not present as an agent stage in your project workflow. The workflow has following agent stages:
+                        rf"""Your function [blue]`{fn_name}`[/blue] was annotated to match agent stage [blue]`{runner_agent.printable_name}`[/blue] but that stage is not present as an agent stage in your project workflow. The workflow has following agent stages:
 
 [{agent_stage_names}]
 
@@ -355,7 +343,7 @@ def {fn_name}(...):
                         """
                     )
 
-                stage = agent_stages[runner_agent.name]
+                stage = agent_stages[runner_agent.identity]
                 if stage.stage_type != WorkflowStageType.AGENT:
                     raise PrintableError(
                         f"""You cannot use the stage of type `{stage.stage_type}` as an agent stage. It has to be one of the agent stages: 
@@ -377,10 +365,10 @@ def {fn_name}(...):
 
                 next_execution = datetime.now() + delta if delta else False
                 for runner_agent in self.agents:
-                    stage = agent_stages[runner_agent.name]
+                    stage = agent_stages[runner_agent.identity]
 
                     batch: list[AgentTask] = []
-                    batch_lrs: list[LabelRowV2] = []
+                    batch_lrs: list[LabelRowV2 | None] = []
 
                     tasks = list(stage.get_tasks())
                     pbar = tqdm(desc="Executing tasks", total=len(tasks))
@@ -389,14 +377,17 @@ def {fn_name}(...):
                             continue
                         batch.append(task)
                         if len(batch) == task_batch_size:
-                            label_rows = {
-                                UUID(lr.data_hash): lr
-                                for lr in project.list_label_rows_v2(data_hashes=[t.data_hash for t in batch])
-                            }
-                            batch_lrs = [label_rows[t.data_hash] for t in batch]
-                            with project.create_bundle() as lr_bundle:
-                                for lr in batch_lrs:
-                                    lr.initialise_labels(bundle=lr_bundle)
+                            batch_lrs = [None] * len(batch)
+                            if runner_agent.dependant.needs_label_row:
+                                label_rows = {
+                                    UUID(lr.data_hash): lr
+                                    for lr in project.list_label_rows_v2(data_hashes=[t.data_hash for t in batch])
+                                }
+                                batch_lrs = [label_rows.get(t.data_hash) for t in batch]
+                                with project.create_bundle() as lr_bundle:
+                                    for lr in batch_lrs:
+                                        if lr:
+                                            lr.initialise_labels(bundle=lr_bundle)
 
                             self._execute_tasks(
                                 zip(batch, batch_lrs),
@@ -409,14 +400,17 @@ def {fn_name}(...):
                             batch_lrs = []
 
                     if len(batch) > 0:
-                        label_rows = {
-                            UUID(lr.data_hash): lr
-                            for lr in project.list_label_rows_v2(data_hashes=[t.data_hash for t in batch])
-                        }
-                        batch_lrs = [label_rows[t.data_hash] for t in batch]
-                        with project.create_bundle() as lr_bundle:
-                            for lr in batch_lrs:
-                                lr.initialise_labels(bundle=lr_bundle)
+                        batch_lrs = [None] * len(batch)
+                        if runner_agent.dependant.needs_label_row:
+                            label_rows = {
+                                UUID(lr.data_hash): lr
+                                for lr in project.list_label_rows_v2(data_hashes=[t.data_hash for t in batch])
+                            }
+                            batch_lrs = [label_rows[t.data_hash] for t in batch]
+                            with project.create_bundle() as lr_bundle:
+                                for lr in batch_lrs:
+                                    if lr:
+                                        lr.initialise_labels(bundle=lr_bundle)
                         self._execute_tasks(zip(batch, batch_lrs), runner_agent, num_retries, pbar=pbar)
         except (PrintableError, AssertionError) as err:
             if self.was_called_from_cli:
