@@ -5,7 +5,7 @@ This module contains dependencies that you can inject within your cloud function
 Dependencies that depend on others don't need to be used together. They'll
 work just fine alone.
 
-Note that you can also use the following _typed_ parameters. If the type annotations 
+Note that you can also use the following _typed_ parameters. If the type annotations
 are not present, the injection mechanism cannot resolve the them:
 
 ```python
@@ -20,29 +20,32 @@ def my_agent(
     label_row: LabelRowV2,
 ):
     ...
-```  
+```
 
-- [`FrameData`](../../reference/core/#encord_agents.core.data_model.FrameData) is automatically injected via the api request body.  
-- [`Project`](https://docs.encord.com/sdk-documentation/sdk-references/project){ target="_blank", rel="noopener noreferrer" } is automatically loaded based on the frame data.  
-- [`label_row_v2`](https://docs.encord.com/sdk-documentation/sdk-references/LabelRowV2) is automatically loaded based on the frame data.  
+- [`FrameData`](../../reference/core/#encord_agents.core.data_model.FrameData) is automatically injected via the api request body.
+- [`Project`](https://docs.encord.com/sdk-documentation/sdk-references/project){ target="_blank", rel="noopener noreferrer" } is automatically loaded based on the frame data.
+- [`label_row_v2`](https://docs.encord.com/sdk-documentation/sdk-references/LabelRowV2) is automatically loaded based on the frame data.
 """
 
-from typing import Generator, Iterator
+from typing import Callable, Generator, Iterator
 
 import cv2
 import numpy as np
 from encord.constants.enums import DataType
+from encord.objects.common import Shape
 from encord.objects.ontology_labels_impl import LabelRowV2
+from encord.objects.ontology_object import Object
 from encord.storage import StorageItem
 from encord.user_client import EncordUserClient
 from numpy.typing import NDArray
 from typing_extensions import Annotated
 
-from encord_agents.core.data_model import Frame, FrameData
+from encord_agents.core.data_model import Frame, FrameData, InstanceCrop
 from encord_agents.core.dependencies.models import Depends
 from encord_agents.core.dependencies.shares import DataLookup
 from encord_agents.core.utils import download_asset, get_user_client
 from encord_agents.core.video import iter_video
+from encord_agents.core.vision import crop_to_object
 
 
 def dep_client() -> EncordUserClient:
@@ -217,3 +220,51 @@ def dep_storage_item(
 
     """
     return lookup.get_storage_item(frame_data.data_hash)
+
+
+def dep_object_crops(
+    filter_ontology_objects: list[Object | str] | None = None,
+) -> Callable[[FrameData, LabelRowV2, NDArray[np.uint8]], list[InstanceCrop]]:
+    """
+    Get a list of object instances and frame crops associated with each object.
+
+    Useful, e.g., to be able to run each crop against a model.
+
+    **Example:**
+
+    ```python
+    @editor_agent
+    def my_agent(crops: Annotated[list[InstanceCrop], Depends[dep_object_crops(filter_ontology_objects=["eBw/75bg"])]]):
+        for crop in crops:
+            crop.content  # <- this is raw numpy rgb values
+            crop.frame    # <- this is the frame number in video
+            crop.instance # <- this is the obejct instance from the label row
+        ...
+    ```
+
+    Args:
+        filter_ontology_objects: Specify a list of ontology objects to include.
+
+    Returns: The dependency to be injected into the cloud function.
+
+    """
+    legal_feature_hashes = {
+        o.feature_node_hash if isinstance(o, Object) else o for o in (filter_ontology_objects or [])
+    }
+
+    def _dep_object_crops(
+        frame_data: FrameData, lr: LabelRowV2, frame: Annotated[NDArray[np.uint8], Depends(dep_single_frame)]
+    ) -> list[InstanceCrop]:
+        legal_shapes = {Shape.POLYGON, Shape.BOUNDING_BOX, Shape.ROTATABLE_BOUNDING_BOX, Shape.BITMASK}
+        return [
+            InstanceCrop(
+                frame=frame_data.frame,
+                content=crop_to_object(frame, o.get_annotation(frame=frame_data.frame).coordinates),  # type: ignore
+                instance=o,
+            )
+            for o in lr.get_object_instances(filter_frames=frame_data.frame)
+            if o.ontology_item.shape in legal_shapes
+            and (not legal_feature_hashes or o.feature_hash in legal_feature_hashes)
+        ]
+
+    return _dep_object_crops
