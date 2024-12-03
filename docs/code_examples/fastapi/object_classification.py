@@ -2,15 +2,29 @@ import os
 
 from anthropic import Anthropic
 from encord.objects.ontology_labels_impl import LabelRowV2
+from encord_agents.core.data_model import InstanceCrop
 from encord_agents.core.ontology import OntologyDataModel
 from encord_agents.core.utils import get_user_client
-from encord_agents.gcp import Depends, editor_agent
-from encord_agents.gcp.dependencies import FrameData, InstanceCrop, dep_object_crops
+from encord_agents.fastapi.dependencies import (
+    FrameData,
+    dep_label_row,
+    dep_object_crops,
+)
 from typing_extensions import Annotated
 
-# User client
+from fastapi import Depends, FastAPI, Form
+from fastapi.middleware.cors import CORSMiddleware
+
+# Initialize FastAPI app
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*", "https://app.encord.com"],
+)
+
+# User client and ontology setup
 client = get_user_client()
-project = client.get_project("<project_hash>")
+project = client.get_project("d2f7665e-8767-4686-8178-0844fac37a7f")
 generic_ont_obj, *other_objects = sorted(
     project.ontology_structure.objects,
     key=lambda o: o.title.lower() == "generic",
@@ -28,26 +42,26 @@ json objects according to this schema:
 Please only respond with valid json.
 """
 
-# Claude
+# Claude setup
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
-# Setup agent
-@editor_agent()
-def agent(
-    frame_data: FrameData,
-    lr: LabelRowV2,
+@app.post("/object_classification")
+async def classify_objects(
+    frame_data: Annotated[FrameData, Form()],
+    lr: Annotated[LabelRowV2, Depends(dep_label_row)],
     crops: Annotated[
         list[InstanceCrop],
         Depends(dep_object_crops(filter_ontology_objects=[generic_ont_obj])),
     ],
 ):
-    # Query Claude
+    """Classify generic objects using Claude."""
+    # Query Claude for each crop
     changes = False
     for crop in crops:
         message = anthropic_client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-3-haiku-20240307",
             max_tokens=1024,
             system=system_prompt,
             messages=[
