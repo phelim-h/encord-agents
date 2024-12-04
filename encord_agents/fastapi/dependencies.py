@@ -34,6 +34,7 @@ from encord.storage import StorageItem
 from encord.user_client import EncordUserClient
 from numpy.typing import NDArray
 
+from encord_agents.core.data_model import LabelRowMetadataIncludeArgs
 from encord_agents.core.dependencies.shares import DataLookup
 from encord_agents.core.vision import crop_to_object
 
@@ -73,6 +74,48 @@ def dep_client() -> EncordUserClient:
 
     """
     return get_user_client()
+
+
+def dep_label_row_with_include_args(
+    label_row_metadata_include_args: LabelRowMetadataIncludeArgs | None = None,
+) -> Callable[[FrameData], LabelRowV2]:
+    """
+    Dependency to provide an initialized label row.
+
+    **Example:**
+
+    ```python
+    from encord_agents.core.data_model import LabelRowMetadataIncludeArgs
+    from encord_agents.fastapi.depencencies import dep_label_row_with_include_args
+    ...
+
+    include_args = LabelRowMetadataIncludeArgs(
+        include_client_metadata=True,
+        include_workflow_graph_node=True,
+    )
+
+    @app.post("/my-route")
+    def my_route(
+        lr: Annotated[LabelRowV2, Depends(dep_label_row_with_include_args(include_args))]
+    ):
+        assert lr.is_labelling_initialised  # will work
+        assert lr.client_metadata           # will be available if set already
+    ```
+
+    Args:
+        frame_data: the frame data from the route. This parameter is automatically injected
+            if it's a part of your route (see example above)
+
+
+    Returns:
+        The initialized label row.
+
+    """
+
+    def wrapper(frame_data: Annotated[FrameData, Form()]) -> LabelRowV2:
+        return get_initialised_label_row(frame_data, label_row_metadata_include_args)
+
+    return wrapper
 
 
 def dep_label_row(frame_data: Annotated[FrameData, Form()]) -> LabelRowV2:
