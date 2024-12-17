@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Generator, Iterator
 
 import cv2
@@ -115,6 +116,40 @@ def dep_video_iterator(lr: LabelRowV2) -> Generator[Iterator[Frame], None, None]
 
     with download_asset(lr, None) as asset:
         yield iter_video(asset)
+
+
+def dep_asset(lr: LabelRowV2) -> Generator[Path, None, None]:
+    """
+    Get a local file path to data asset temporarily stored till end of task execution.
+
+    This dependency will fetch the underlying data asset based on a signed url.
+    It will temporarily store the data on disk. Once the task is completed, the
+    asset will be removed from disk again.
+
+    **Example:**
+
+    ```python
+    from encord_agents.tasks.dependencies import dep_asset
+    ...
+    runner = Runner(project_hash="<project_hash_a>")
+
+    @runner.stage("<stage_name_or_uuid>")
+    def my_agent(
+        asset: Annotated[Path, Depends(dep_asset)],
+    ) -> str | None:
+        asset.stat()  # read file stats
+        ...
+    ```
+
+    Returns:
+        The path to the asset.
+
+    Raises:
+        `ValueError` if the underlying assets are not videos, images, or audio.
+        `EncordException` if data type not supported by SDK yet.
+    """
+    with download_asset(lr) as asset:
+        yield asset
 
 
 @dataclass(frozen=True)
