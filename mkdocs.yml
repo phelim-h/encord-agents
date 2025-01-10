@@ -1,5 +1,7 @@
 site_name: "Encord Agents"
 repo_url: https://github.com/encord-team/encord-agents
+colab_prefix: https://colab.research.google.com/github/encord-team/encord-agents
+branch_name: feat/colab-task-examples # used for debugging should be "main"
 
 watch:
   - encord_agents
@@ -8,6 +10,7 @@ theme:
   logo: assets/logo_single.png
   favicon: assets/favicon.png
   name: "material"
+  custom_dir: docs/overrides
   features:
     - content.code.copy
     - navigation.footer
@@ -27,7 +30,10 @@ nav:
   - "Task Agents":
       - "Intro": task_agents/index.md
       - "Execution": task_agents/runner.md
-      - "Examples": task_agents/examples/index.md
+      - "Examples":
+          - Prioritize Annotation Tasks: notebooks/task_agent_set_priority.ipynb
+          - Transfer labels to a twin project: notebooks/twin_project_label_transfer.ipynb
+          - Pre-label videos with bounding boxes: notebooks/prelabel_videos_with_bounding_boxes.ipynb
   - "Reference":
       - "Editor agents": reference/editor_agents.md
       - "Task agents": reference/task_agents.md
@@ -35,6 +41,9 @@ nav:
 
 extra:
   homepage: https://encord.com
+
+extra_css:
+  - stylesheets/extra.css
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -80,3 +89,6 @@ plugins:
             show_docstring_yields: true
             show_docstring_examples: true
   - glightbox
+  - mkdocs-jupyter:
+      include: ["*.ipynb"]
+      include_source: true
