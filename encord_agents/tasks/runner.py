@@ -603,7 +603,7 @@ class QueueRunner(RunnerBase):
         raise NotImplementedError(
             "Calling the QueueRunner is not intended. "
             "Prefer using wrapped functions with, e.g., modal or Celery. "
-            "For more documentation, please see the `QueueRunner.stage` documetation below."
+            "For more documentation, please see the `QueueRunner.stage` documentation below."
         )
 
     def stage(
