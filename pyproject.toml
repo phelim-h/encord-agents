@@ -74,9 +74,11 @@ types-requests = "^2.32.0.20241016"
 types-tqdm = "^4.67.0.20241119"
 mypy = "^1.13.0"
 pytest-cov = "^6.0.0"
+pytest-env = "^1.1.5"
 mkdocs-jupyter = "^0.25.1"
 notebook = "^7.3.2"
 mkdocs-macros-plugin = "^1.3.7"
+fastapi = "^0.115.0"
 
 
 [tool.poetry.scripts]
@@ -91,7 +93,7 @@ target-version = "py310"
 line-length = 120
 
 [tool.ruff.lint]
-extend-select = ["W", "Q", "I"]
+extend-select = ["W", "Q", "I", "F401"]
 ignore = ["F401", "E402", "W291"]
 
 [tool.mypy]
@@ -108,6 +110,15 @@ no_implicit_reexport = true
 ignore_missing_imports = true
 warn_return_any = true
 strict = true
+
+[tool.pytest.ini_options]
+addopts = "--cov=encord_agents --cov-report=html --junitxml=encord-agents-unit-test-report.xml"
+markers = [
+    "env_mode(AuthMode): mark test to run in a specific environment mode",
+]
+
+[tool.pytest_env]
+ENCORD_SSH_KEY_FILE = {value="tests/integration_tests/private_key_integration_testing", skif_if_set = false}
 
 [tool.codespell]
 skip = '*.lock,*.ipynb'
