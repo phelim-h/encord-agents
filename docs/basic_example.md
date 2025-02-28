@@ -2,7 +2,7 @@ Before getting started, ensure that you have:
 
 * `python >= 3.10`. If you do not have Python 3.10, we recommend using [`pyenv`](https://github.com/pyenv/pyenv){ target="\_blank", rel="noopener noreferrer" } to manage your Python versions.
 * The ability to authenticate with Encord.
-* [Installed the Encord Agents library](docs/installation.md).
+* [Installed the Encord Agents library](./installation.md).
 
 The following example shows how to create a simple [task agent](task_agents/index.md).
 to change the priority of each task before moving it to the next stage of the Workflow.
