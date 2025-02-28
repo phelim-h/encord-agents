@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Generator
+from unittest.mock import MagicMock
 
 import pytest
 from encord.dataset import Dataset
@@ -15,9 +16,20 @@ ONE_OF_EACH_DATASET_HASH = (
     # dataset with [image, image group, image_sequence, pdf, audio, txt, and video]
     "5d06b07b-135a-4c6d-ba5d-fa7048d996da"
 )
+IMAGES_520_DATASET_HASH = (
+    # dataset with 520 small images
+    "d0370f27-da4c-48fa-8502-049b55e26a5f"
+)
 # Client metadata of the form: {"item_type": item.item_type, "a": "b"}
 
+# Workflow:
 AGENT_TO_COMPLETE_WORKFLOW_HASH = "a59b3190-09e2-432c-a8bb-f2925872e298"
+
+AGENT_STAGE_NAME = "Agent 1"
+COMPLETE_STAGE_NAME = "Complete"
+AGENT_TO_COMPLETE_PATHWAY_HASH = "49a786f3-5edf-4b94-aff0-3da9042d3bf0"
+AGENT_TO_COMPLETE_PATHWAY_NAME = "Complete"
+
 EPHEMERAL_PROJECT_TITLE = "encord-agents test project"
 EPHEMERAL_PROJECT_DESCRIPTION = "encord-agents test project description"
 
@@ -94,7 +106,7 @@ def workflow_hash(
     │  start  ├───►│  Agent 1  ├─┬─►│  Complete  │
     └─────────┘    └───────────┘ │  └────────────┘
                                 │
-                            Name: "complete"
+                            Name: "Complete"
                             Uuid: "49a786f3-5edf-4b94-aff0-3da9042d3bf0"
     """
     return AGENT_TO_COMPLETE_WORKFLOW_HASH
@@ -104,10 +116,11 @@ def create_default_project(
     user_client: EncordUserClient,
     all_purpose_ontology: Ontology,
     workflow_hash: str,
+    dataset_hash: str,
 ) -> Iterator[str]:
     project_hash = user_client.create_project(
         project_title=EPHEMERAL_PROJECT_TITLE,
-        dataset_hashes=[ONE_OF_EACH_DATASET_HASH],
+        dataset_hashes=[dataset_hash],
         project_description=EPHEMERAL_PROJECT_DESCRIPTION,
         ontology_hash=all_purpose_ontology.ontology_hash,
         workflow_template_hash=workflow_hash,
@@ -116,13 +129,32 @@ def create_default_project(
     user_client.querier.basic_delete(Project, uid=project_hash)
 
 
+def ephemeral_project_hash_base(
+    user_client: EncordUserClient,
+    all_purpose_ontology: Ontology,
+    workflow_hash: str,
+    dataset_hash: str,
+) -> Iterator[str]:
+    print(f"Creating ephemeral project hash Default: {dataset_hash==ONE_OF_EACH_DATASET_HASH}")
+    yield from create_default_project(user_client, all_purpose_ontology, workflow_hash, dataset_hash)
+
+
 @pytest.fixture(scope="function")
 def ephemeral_project_hash(
     user_client: EncordUserClient,
     all_purpose_ontology: Ontology,
     workflow_hash: str,
 ) -> Iterator[str]:
-    yield from create_default_project(user_client, all_purpose_ontology, workflow_hash)
+    yield from ephemeral_project_hash_base(user_client, all_purpose_ontology, workflow_hash, ONE_OF_EACH_DATASET_HASH)
+
+
+@pytest.fixture(scope="function")
+def ephemeral_image_project_hash(
+    user_client: EncordUserClient,
+    all_purpose_ontology: Ontology,
+    workflow_hash: str,
+) -> Iterator[str]:
+    yield from ephemeral_project_hash_base(user_client, all_purpose_ontology, workflow_hash, IMAGES_520_DATASET_HASH)
 
 
 @pytest.fixture(scope="class")
@@ -131,7 +163,7 @@ def class_level_ephemeral_project_hash(
     all_purpose_ontology: Ontology,
     workflow_hash: str,
 ) -> Iterator[str]:
-    yield from create_default_project(user_client, all_purpose_ontology, workflow_hash)
+    yield from create_default_project(user_client, all_purpose_ontology, workflow_hash, ONE_OF_EACH_DATASET_HASH)
 
 
 @pytest.fixture(scope="class")
@@ -140,4 +172,9 @@ def class_level_ephemeral_twin_project_hash(
     all_purpose_ontology: Ontology,
     workflow_hash: str,
 ) -> Iterator[str]:
-    yield from create_default_project(user_client, all_purpose_ontology, workflow_hash)
+    yield from create_default_project(user_client, all_purpose_ontology, workflow_hash, ONE_OF_EACH_DATASET_HASH)
+
+
+@pytest.fixture(scope="function")
+def mock_agent() -> MagicMock:
+    return MagicMock(return_value=AGENT_TO_COMPLETE_PATHWAY_NAME)
