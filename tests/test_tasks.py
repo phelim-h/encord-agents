@@ -56,4 +56,4 @@ def test_max_tasks_per_stage_validation() -> None:
 
     with pytest.raises(PrintableError):
         runner(max_tasks_per_stage=-1)
-    # As is, can't test actually making max_tasks without major re-factor / mocking
+    # Actual behaviour checked in integration_tests/tasks/test_queue_runner via integration test
