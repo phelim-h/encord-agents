@@ -1,15 +1,16 @@
 from unittest.mock import MagicMock
+from uuid import UUID, uuid4
 
 import pytest
-from encord.user_client import EncordUserClient
 from encord.workflow.stages.agent import AgentStage, AgentTask
 from encord.workflow.stages.final import FinalStage
 
-from encord_agents.core.utils import batch_iterator
+from encord_agents.exceptions import PrintableError
 from encord_agents.tasks import QueueRunner
 from encord_agents.tasks.models import TaskCompletionResult
 from tests.fixtures import (
     AGENT_STAGE_NAME,
+    AGENT_TO_COMPLETE_PATHWAY_HASH,
     AGENT_TO_COMPLETE_PATHWAY_NAME,
     COMPLETE_STAGE_NAME,
 )
@@ -62,7 +63,7 @@ def test_queue_runner_e2e(ephemeral_project_hash: str, mock_agent: MagicMock) ->
         result = TaskCompletionResult.model_validate_json(result_json)
         assert result.success
         assert not result.error
-        assert result.pathway == AGENT_TO_COMPLETE_PATHWAY_NAME
+        assert result.pathway == UUID(AGENT_TO_COMPLETE_PATHWAY_HASH)
         assert result.stage_uuid == agent_stage.uuid
         assert result.task_uuid == agent_task.uuid
 
@@ -111,3 +112,30 @@ def test_queue_runner_passes_errors_appropriately(ephemeral_project_hash: str) -
     final_stage = queue_runner.project.workflow.get_stage(name=COMPLETE_STAGE_NAME, type_=FinalStage)
     final_stage_tasks = list(final_stage.get_tasks())
     assert len(final_stage_tasks) == 0
+
+
+@pytest.mark.parametrize(
+    "pathway_name", [pytest.param(True, id="Pass an incorrect name"), pytest.param(False, id="Pass an incorrect UUID")]
+)
+def test_runner_throws_error_if_wrong_pathway(ephemeral_project_hash: str, pathway_name: bool) -> None:
+    queue_runner = QueueRunner(project_hash=ephemeral_project_hash)
+
+    wrong_pathway: str | UUID = "Not the name of the pathway" if pathway_name else uuid4()
+
+    @queue_runner.stage(AGENT_STAGE_NAME)
+    def agent_function(task: AgentTask) -> str | UUID:
+        return wrong_pathway
+
+    queue: list[str] = []
+    for stage in queue_runner.get_agent_stages():
+        for task in stage.get_tasks():
+            queue.append(task.model_dump_json())
+
+    while queue:
+        task_spec = queue.pop()
+        with pytest.raises(PrintableError) as e:
+            agent_function(task_spec)
+        if pathway_name:
+            assert AGENT_TO_COMPLETE_PATHWAY_NAME in str(e)
+        else:
+            assert AGENT_TO_COMPLETE_PATHWAY_HASH in str(e)

@@ -9,6 +9,7 @@ from typing import Any, Callable, Iterable, Optional
 from uuid import UUID
 
 import rich
+from encord.exceptions import InvalidArgumentsError
 from encord.http.bundle import Bundle
 from encord.objects.ontology_labels_impl import LabelRowV2
 from encord.orm.project import ProjectType
@@ -40,6 +41,7 @@ from encord_agents.core.dependencies.utils import get_dependant, solve_dependenc
 from encord_agents.core.rich_columns import TaskSpeedColumn
 from encord_agents.core.utils import batch_iterator, get_user_client
 from encord_agents.exceptions import PrintableError
+from encord_agents.utils.generic_utils import try_coerce_UUID
 
 from .models import AgentTaskConfig, TaskCompletionResult
 
@@ -358,10 +360,13 @@ class Runner(RunnerBase):
         project: Project,
         tasks: Iterable[tuple[AgentTask, LabelRowV2 | None]],
         runner_agent: RunnerAgent,
-        # num_threads: int,
+        stage: AgentStage,
         num_retries: int,
         pbar_update: Callable[[float | None], bool | None] | None = None,
     ) -> None:
+        """
+        INVARIANT: Tasks should always be for the stage that the runner_agent is associated too
+        """
         with Bundle() as bundle:
             for task, label_row in tasks:
                 with ExitStack() as stack:
@@ -372,20 +377,25 @@ class Runner(RunnerBase):
                             next_stage = runner_agent.callable(**dependencies.values)
                             if next_stage is None:
                                 pass
-                            elif isinstance(next_stage, UUID):
-                                task.proceed(pathway_uuid=str(next_stage), bundle=bundle)
+                            elif next_stage_uuid := try_coerce_UUID(next_stage):
+                                if next_stage_uuid not in [pathway.uuid for pathway in stage.pathways]:
+                                    raise PrintableError(
+                                        f"No pathway with UUID: {next_stage} found. Accepted pathway UUIDs are: {[pathway.uuid for pathway in stage.pathways]}"
+                                    )
+                                task.proceed(pathway_uuid=str(next_stage_uuid), bundle=bundle)
                             else:
-                                try:
-                                    _next_stage = UUID(next_stage)
-                                    task.proceed(pathway_uuid=str(_next_stage), bundle=bundle)
-                                except ValueError:
-                                    task.proceed(pathway_name=next_stage, bundle=bundle)
-
+                                if next_stage not in [str(pathway.name) for pathway in stage.pathways]:
+                                    raise PrintableError(
+                                        f"No pathway with name: {next_stage} found. Accepted pathway names are: {[pathway.name for pathway in stage.pathways]}"
+                                    )
+                                task.proceed(pathway_name=str(next_stage), bundle=bundle)
                             if pbar_update is not None:
                                 pbar_update(1.0)
                             break
 
                         except KeyboardInterrupt:
+                            raise
+                        except PrintableError:
                             raise
                         except Exception:
                             print(f"[attempt {attempt+1}/{num_retries+1}] Agent failed with error: ")
@@ -594,6 +604,7 @@ def {fn_name}(...):
                                 project,
                                 zip(batch, batch_lrs),
                                 runner_agent,
+                                stage,
                                 num_retries,
                                 pbar_update=lambda x: batch_pbar.advance(batch_task, x or 1),
                             )
@@ -761,17 +772,28 @@ class QueueRunner(RunnerBase):
             include_args = runner_agent.label_row_metadata_include_args or LabelRowMetadataIncludeArgs()
             init_args = runner_agent.label_row_initialise_labels_args or LabelRowInitialiseLabelsArgs()
 
-            @wraps(func)
-            def wrapper(json_str: str) -> str:
-                conf = AgentTaskConfig.model_validate_json(json_str)
-                try:
-                    stage = self._project.workflow.get_stage(uuid=runner_agent.identity, type_=AgentStage)
-                except ValueError as e:
+            try:
+                stage = self._project.workflow.get_stage(uuid=runner_agent.identity, type_=AgentStage)
+            except ValueError as err:
+                # Local binding to help mypy
+                error = err
+
+                @wraps(func)
+                def null_wrapper(json_str: str) -> str:
+                    conf = AgentTaskConfig.model_validate_json(json_str)
                     return TaskCompletionResult(
                         task_uuid=conf.task_uuid,
                         success=False,
-                        error=str(e),
+                        error=str(error),
                     ).model_dump_json()
+
+                return null_wrapper
+            pathway_lookup = {pathway.uuid: pathway.name for pathway in stage.pathways}
+            name_lookup = {pathway.name: pathway.uuid for pathway in stage.pathways}
+
+            @wraps(func)
+            def wrapper(json_str: str) -> str:
+                conf = AgentTaskConfig.model_validate_json(json_str)
 
                 task = next((s for s in stage.get_tasks(data_hash=conf.data_hash)), None)
                 if task is None:
@@ -798,21 +820,28 @@ class QueueRunner(RunnerBase):
                             context=context, dependant=runner_agent.dependant, stack=stack
                         )
                         next_stage = runner_agent.callable(**dependencies.values)
-
+                    next_stage_uuid: UUID | None = None
                     if next_stage is None:
                         # TODO: Should we log that task didn't continue?
                         pass
-                    elif isinstance(next_stage, UUID):
-                        task.proceed(pathway_uuid=str(next_stage))
+                    elif next_stage_uuid := try_coerce_UUID(next_stage):
+                        if next_stage_uuid not in pathway_lookup.keys():
+                            raise PrintableError(
+                                f"Runner responded with pathway UUID: {next_stage}, only accept: {[pathway.uuid for pathway in stage.pathways]}"
+                            )
+                        task.proceed(pathway_uuid=str(next_stage_uuid))
                     else:
-                        try:
-                            next_stage = UUID(next_stage)
-                            task.proceed(pathway_uuid=str(next_stage))
-                        except ValueError:
-                            task.proceed(pathway_name=str(next_stage))
+                        if next_stage not in [pathway.name for pathway in stage.pathways]:
+                            raise PrintableError(
+                                f"Runner responded with pathway name: {next_stage}, only accept: {[pathway.name for pathway in stage.pathways]}"
+                            )
+                        task.proceed(pathway_name=str(next_stage))
+                        next_stage_uuid = name_lookup[str(next_stage)]
                     return TaskCompletionResult(
-                        task_uuid=task.uuid, stage_uuid=stage.uuid, success=True, pathway=next_stage
+                        task_uuid=task.uuid, stage_uuid=stage.uuid, success=True, pathway=next_stage_uuid
                     ).model_dump_json()
+                except PrintableError:
+                    raise
                 except Exception:
                     # TODO logging?
                     return TaskCompletionResult(
