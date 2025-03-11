@@ -111,5 +111,16 @@ def crop_to_object(image: NDArray[np.uint8], coordinates: CroppableCoordinates) 
 
 
 def b64_encode_image(img: NDArray[np.uint8], format: Base64Formats = ".jpg") -> str:
-    _, encoded_image = cv2.imencode(format, img)
+    """
+    Encode an image to a base64 string.
+
+    Args:
+        img: The image to encode. Expects [RGB] channels
+        format: The format of the image.
+
+    Returns:
+        The base64 encoded image.
+    """
+    coerced_color_img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    _, encoded_image = cv2.imencode(format, coerced_color_img)
     return base64.b64encode(encoded_image).decode("utf-8")  # type: ignore
