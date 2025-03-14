@@ -8,6 +8,7 @@ from encord.storage import StorageItem
 from encord.user_client import EncordUserClient
 
 from encord_agents.core.data_model import LabelRowInitialiseLabelsArgs, LabelRowMetadataIncludeArgs
+from encord_agents.fastapi.cors import EncordCORSMiddleware
 from encord_agents.fastapi.dependencies import (
     dep_client,
     dep_label_row,
@@ -26,6 +27,7 @@ except Exception:
 
 def build_app(ephermeral_project: Project, video_label_row: LabelRowV2) -> FastAPI:
     app = FastAPI()
+    app.add_middleware(EncordCORSMiddleware)
 
     @app.post("/client")
     def post_client(client: Annotated[EncordUserClient, Depends(dep_client)]) -> None:

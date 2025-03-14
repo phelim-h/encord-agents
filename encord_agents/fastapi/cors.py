@@ -4,10 +4,14 @@ with the appropriate CORS Middleware to allow
 interactions from the Encord platform.
 """
 
+import json
 import typing
 
 try:
+    from fastapi import Request
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse, Response
+    from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
     from starlette.types import ASGIApp
 except ModuleNotFoundError:
     print(
@@ -15,28 +19,12 @@ except ModuleNotFoundError:
     )
     exit()
 
-from encord_agents.core.constants import ENCORD_DOMAIN_REGEX
+from encord_agents.core.constants import EDITOR_TEST_REQUEST_HEADER, ENCORD_DOMAIN_REGEX
 
 
 # Type checking does not work here because we do not enforce people to
 # install fastapi as they can use package for, e.g., task runner wo fastapi.
-class EncordCORSMiddleware(CORSMiddleware):  # type: ignore [misc, unused-ignore]
-    """
-    Like a regular `fastapi.midleware.cors.CORSMiddleware` but matches against
-    the Encord origin by default.
-
-    **Example:**
-    ```python
-    from fastapi import FastAPI
-    from encord_agents.fastapi.cors import EncordCORSMiddleware
-
-    app = FastAPI()
-    app.add_middleware(EncordCORSMiddleware)
-    ```
-
-    The CORS middleware will allow POST requests from the Encord domain.
-    """
-
+class _EncordCORSMiddlewarePure(CORSMiddleware):  # type: ignore [misc, unused-ignore]
     def __init__(
         self,
         app: ASGIApp,
@@ -58,3 +46,28 @@ class EncordCORSMiddleware(CORSMiddleware):  # type: ignore [misc, unused-ignore
             expose_headers,
             max_age,
         )
+
+
+class EncordCORSMiddleware(BaseHTTPMiddleware, _EncordCORSMiddlewarePure):  # type: ignore [misc, unused-ignore]
+    """
+    Like a regular `fastapi.middleware.cors.CORSMiddleware` but matches against
+    the Encord origin by default and handles X-Encord-Editor-Agent test header
+
+    **Example:**
+    ```python
+    from fastapi import FastAPI
+    from encord_agents.fastapi.cors import EncordCORSMiddleware
+
+    app = FastAPI()
+    app.add_middleware(EncordCORSMiddleware)
+    ```
+
+    The CORS middleware will allow POST requests from the Encord domain.
+    """
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        if request.method == "POST":
+            if request.headers.get(EDITOR_TEST_REQUEST_HEADER):
+                return JSONResponse(content=None, status_code=200)
+
+        return await call_next(request)
