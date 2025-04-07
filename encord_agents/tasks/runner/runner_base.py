@@ -29,6 +29,7 @@ class RunnerAgent:
         printable_name: str | None = None,
         label_row_metadata_include_args: LabelRowMetadataIncludeArgs | None = None,
         label_row_initialise_labels_args: LabelRowInitialiseLabelsArgs | None = None,
+        will_set_priority: bool = False,
     ):
         self.identity = identity
         self.printable_name = printable_name or identity
@@ -36,6 +37,7 @@ class RunnerAgent:
         self.dependant: Dependant = get_dependant(func=callable)
         self.label_row_metadata_include_args = label_row_metadata_include_args
         self.label_row_initialise_labels_args = label_row_initialise_labels_args
+        self.will_set_priority = will_set_priority
 
     def __repr__(self) -> str:
         return f'RunnerAgent("{self.printable_name}")'
@@ -132,11 +134,12 @@ class RunnerBase:
             for task in task_batch
         ]
         batch_lrs: list[LabelRowV2] = []
-        if runner_agent.dependant.needs_label_row:
+        if runner_agent.dependant.needs_label_row or runner_agent.will_set_priority:
             batch_lrs = RunnerBase._get_ordered_label_rows_from_tasks(task_batch, include_args, project)
-            with project.create_bundle() as lr_bundle:
-                for lr in batch_lrs:
-                    lr.initialise_labels(bundle=lr_bundle, **init_args.model_dump())
+            if runner_agent.dependant.needs_label_row:
+                with project.create_bundle() as lr_bundle:
+                    for lr in batch_lrs:
+                        lr.initialise_labels(bundle=lr_bundle, **init_args.model_dump())
             for label_row, context in zip(batch_lrs, contexts, strict=True):
                 context.label_row = label_row
         if runner_agent.dependant.needs_storage_item:
@@ -222,6 +225,7 @@ class RunnerBase:
         printable_name: str | None,
         label_row_metadata_include_args: LabelRowMetadataIncludeArgs | None,
         label_row_initialise_labels_args: LabelRowInitialiseLabelsArgs | None,
+        will_set_priority: bool = False,
     ) -> RunnerAgent:
         runner_agent = RunnerAgent(
             identity=identity,
@@ -229,6 +233,7 @@ class RunnerBase:
             printable_name=printable_name,
             label_row_metadata_include_args=label_row_metadata_include_args,
             label_row_initialise_labels_args=label_row_initialise_labels_args,
+            will_set_priority=will_set_priority,
         )
         if stage_insertion is not None:
             if stage_insertion >= len(self.agents):
