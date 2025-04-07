@@ -21,7 +21,7 @@ def get_frame(video_path: Path, desired_frame: int) -> NDArray[np.uint8]:
             frame could not be retrieved from the video.
 
     Returns:
-        Numpy array of shape [h, w, c] where channels are RGB.
+        Numpy array of shape [h, w, c] where channels are BGR.
 
     """
     cap = cv2.VideoCapture(video_path.as_posix())
@@ -35,7 +35,7 @@ def get_frame(video_path: Path, desired_frame: int) -> NDArray[np.uint8]:
         raise Exception("Error retrieving frame.")
 
     cap.release()
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
     return frame.astype(np.uint8)
 
 
