@@ -4,7 +4,7 @@ Steps to make it work:
 
 # 1. Install modal and encord-agents:
 ```
-python -m pip install modal "encord-agents[opencv]"
+python -m pip install modal "encord-agents[vision]" "fastapi[standard]"
 ```
 
 # 2. Log in to modal
@@ -46,7 +46,7 @@ image = (
     )
     .pip_install(
         "fastapi[standard]",
-        "encord-agents",
+        "encord-agents[vision]",
     )
 )
 app = modal.App(name="encord-agents-add-ball", image=image)
