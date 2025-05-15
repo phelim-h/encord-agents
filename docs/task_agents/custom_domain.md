@@ -48,8 +48,8 @@ Since Encord is a separate package than Encord-Agents, when leveraging an Encord
 For tasks that need the Encord client for every operation, we recommend:
 ```python
 @app.post("/my-agent")
-def my_agent(user_client: Anntotated[EncordUserClient, Depends(dep_user_client)]):
-    # use agent to get project, dataset, etc
+def my_agent(user_client: Annotated[EncordUserClient, Depends(dep_user_client)]):
+    # use agent to get project, dataset, etc 
 ```
 
 If you only need the client once to do batch processing or filtering, you can fetch the existing client from the agents library:
