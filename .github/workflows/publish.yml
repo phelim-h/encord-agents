@@ -44,3 +44,4 @@ jobs:
           uv publish --token ${{ secrets.PYPI_TOKEN }}
   publish-docs:
     uses: ./.github/workflows/update-docs.yml
+    secrets: inherit
