@@ -150,7 +150,7 @@ class RunnerBase:
 
             # Raises a vlaue error if the two lengths do not match, as they should.
             if len(storage_items) != len(batch_lrs):
-                raise ValueError("You do not have permission to access some of these storage files.")  
+                raise ValueError("You do not have permission to access some of these storage files.")
 
             for storage_item, context in zip(storage_items, contexts, strict=True):
                 context.storage_item = storage_item
