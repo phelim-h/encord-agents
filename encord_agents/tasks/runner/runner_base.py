@@ -148,7 +148,7 @@ class RunnerBase:
                 batch_lrs = RunnerBase._get_ordered_label_rows_from_tasks(task_batch, None, project)
             storage_items = client.get_storage_items([lr.backing_item_uuid or "" for lr in batch_lrs], sign_url=True)
 
-            # Raises a vlaue error if the two lengths do not match, as they should.
+            # Raises a value error if the two lengths do not match, as they should.
             if len(storage_items) != len(batch_lrs):
                 raise ValueError("You do not have permission to access some of these storage files.")
 
